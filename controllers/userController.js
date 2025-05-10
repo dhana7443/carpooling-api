@@ -1,11 +1,15 @@
 const User = require('../models/User');
+const Role = require("../models/Role");
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 
 // Register a user
 exports.registerUser = async (req, res) => {
   try {
-    const { email, password, phone_number, gender, role_id } = req.body;
+    const { email, password, phone_number, gender, role_name } = req.body;
+    // 1. Find role by name
+    const role = await Role.findOne({ name: role_name });
+    if (!role) return res.status(400).json({ message: "Invalid role" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -15,7 +19,7 @@ exports.registerUser = async (req, res) => {
       password: hashedPassword,
       phone_number,
       gender,
-      role_id
+      role_id: role._id   // Save role ID here
     });
 
     await user.save();
@@ -28,7 +32,10 @@ exports.registerUser = async (req, res) => {
 // Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const users = await User.find()
+      .populate("role_id", "name -_id")  // Replace role_id with name only
+      .select("-password");             // Remove password from response
+
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
