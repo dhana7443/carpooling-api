@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Role = require("../models/Role");
 const bcrypt = require('bcrypt');
+const generateToken = require("../utils/generateToken");
 const { sendEmailOTP, sendPhoneOTP, generateOTP } = require('../utils/otpService');
 const { v4: uuidv4 } = require('uuid');
 
@@ -22,16 +23,9 @@ exports.registerUser = async (req, res) => {
     const phoneOtp = generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-
-    // 4. Send OTPs
-    await sendEmailOTP(email, emailOtp);
-    await sendPhoneOTP(phone, phoneOtp);
-
-    //5. Hashed Passwords
+    //4. Hashed Passwords
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    
-
     const user = new User({
       user_id: uuidv4(),
       name,
@@ -91,6 +85,173 @@ exports.verifyUser = async (req, res) => {
   } catch (err) {
     console.error('Verify Error:', err.message);
     return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//Resend Otp
+exports.resendOTP = async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+
+    // Validate input
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Please provide email or phone to resend OTP' });
+    }
+
+    const user = await User.findOne({ $or: [{ email }, { phone }] });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.is_verified === 'verified') return res.status(400).json({ message: 'User already verified' });
+
+    
+    // Generate server OTPs
+    const emailOtp = generateOTP();
+    const phoneOtp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store OTP and expiry
+    if (email) {
+      user.email_otp =emailOtp;
+    }
+    if (phone) {
+      user.phone_otp = phoneOtp;
+    }
+    user.otp_expiry = otpExpiry;
+    await user.save();
+
+    // Send OTP
+    if (email) await sendEmailOTP(email, emailOtp);
+    if (phone) await sendPhoneOTP(phone, phoneOtp);
+
+    res.status(200).json({ message: 'OTP resent successfully' });
+  } catch (error) {
+    console.error('Error in resendOTP:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+//Login User
+exports.loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Find user and populate role name
+    const user = await User.findOne({ email }).populate("role_id");
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    if (user.is_verified !== "verified") {
+      return res.status(403).json({ message: "User is not verified" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const token = generateToken(user._id);
+
+    let dashboard = "";
+    if (user.role_id.name === "rider") {
+      dashboard = "/rider/dashboard";
+    } else if (user.role_id.name === "driver") {
+      dashboard = "/driver/dashboard";
+    } else if (user.role_id.name === "admin") {
+      dashboard = "/admin/dashboard";
+    }
+
+    res.status(200).json({
+      message: `Login successful as ${user.role_id.name}`,
+      dashboard,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role_id.name,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+//Forgot Password
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Please provide email or phone' });
+    }
+
+    const user = await User.findOne({ $or: [{ email }, { phone }] });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+     // Generate server OTPs
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+
+    if (email) {
+      user.email_otp = otp;
+    }
+    if (phone) {
+      user.phone_otp = otp;
+    }
+    user.otp_expiry = otpExpiry;
+
+    await user.save();
+
+    if (email) await sendEmailOTP(email, otp);
+    if (phone) await sendPhoneOTP(phone, otp);
+
+    res.status(200).json({ message: 'OTP sent for password reset' });
+  } catch (err) {
+    console.error('Forgot Password Error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//Reset Password
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, phone, otp, new_password } = req.body;
+
+    if ((!email && !phone) || !otp || !new_password) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    const user = await User.findOne({ $or: [{ email }, { phone }] });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.otp_expiry < Date.now()) {
+      return res.status(400).json({ message: 'OTP expired' });
+    }
+
+    const validOtp = (email && user.email_otp === otp) || (phone && user.phone_otp === otp);
+
+    if (!validOtp) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+
+    user.password = await bcrypt.hash(new_password, 10);
+    user.email_otp = undefined;
+    user.phone_otp = undefined;
+    user.otp_expiry = undefined;
+
+    await user.save();
+
+    res.status(200).json({ message: 'Password reset successful' });
+  } catch (err) {
+    console.error('Reset Password Error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 

@@ -8,6 +8,18 @@ router.post('/register', userController.registerUser);
 //Verify Email and Phone
 router.post('/verify', userController.verifyUser);
 
+//Resend Otp
+router.post('/resendOtp',userController.resendOTP)
+
+//Login
+router.post('/login',userController.loginUser);
+
+//Forgot Password
+router.post('/forgot-password',userController.forgotPassword)
+
+//Reset Password
+router.post('/reset-password',userController.resetPassword)
+
 // Get all users
 router.get('/', userController.getAllUsers);
 
