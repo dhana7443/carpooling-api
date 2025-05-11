@@ -7,6 +7,11 @@ const userSchema = new mongoose.Schema({
     unique: true,
     required: true
   },
+  name:
+  {
+    type:String,
+    required:true
+  },
   email: {
     type: String,
     required: true,
@@ -15,7 +20,7 @@ const userSchema = new mongoose.Schema({
   profile_picture: {
     type: Buffer // Alternatively, use String if you're storing URL to cloud storage
   },
-  phone_number: {
+  phone: {
     type: Number,
     required: true
   },
@@ -36,6 +41,18 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Role',
     required: true
+  },
+  email_otp:
+   { 
+    type: String
+   },
+  phone_otp: 
+  { 
+    type: String 
+  },
+  otp_expiry:
+  {
+     type: Date
   },
   create_datetime: {
     type: Date,
