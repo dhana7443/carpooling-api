@@ -5,7 +5,7 @@ const generateToken = require("../utils/generateToken");
 const { sendEmailOTP, sendPhoneOTP, generateOTP } = require('../utils/otpService');
 const { v4: uuidv4 } = require('uuid');
 
-// Register a user
+//1. Register a user
 exports.registerUser = async (req, res) => {
   try {
      const { name, email, phone, password, role_name } = req.body;
@@ -53,7 +53,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-//Verify User
+//2. Verify User
 exports.verifyUser = async (req, res) => {
   try {
     const { email, email_otp, phone_otp } = req.body;
@@ -88,7 +88,7 @@ exports.verifyUser = async (req, res) => {
   }
 };
 
-//Resend Otp
+//3. Resend Otp
 exports.resendOTP = async (req, res) => {
   try {
     const { email, phone } = req.body;
@@ -131,7 +131,7 @@ exports.resendOTP = async (req, res) => {
 };
 
 
-//Login User
+//4. Login User
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -153,7 +153,7 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user);
 
     let dashboard = "";
     if (user.role_id.name === "rider") {
@@ -180,7 +180,7 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-//Forgot Password
+//5. Forgot Password
 exports.forgotPassword = async (req, res) => {
   try {
     const { email, phone } = req.body;
@@ -218,7 +218,7 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-//Reset Password
+//6. Reset Password
 exports.resetPassword = async (req, res) => {
   try {
     const { email, phone, otp, new_password } = req.body;
@@ -256,7 +256,7 @@ exports.resetPassword = async (req, res) => {
 };
 
 
-// Get all users
+//7. Get all users
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -269,7 +269,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// Get a single user
+//8. Get a single user
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findOne({ user_id: req.params.id }).select('-password');
@@ -280,7 +280,7 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// Update user
+//9. Update user
 exports.updateUser = async (req, res) => {
   try {
     const updates = req.body;
@@ -295,7 +295,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-// Delete user
+//10. Delete user
 exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findOneAndDelete({ user_id: req.params.id });
@@ -304,5 +304,41 @@ exports.deleteUser = async (req, res) => {
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // From JWT middleware
+
+    const { name, email, phone, password } = req.body;
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (phone) updateData.phone = phone;
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'User details updated successfully',
+      user: {
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: err.message,
+    });
   }
 };
